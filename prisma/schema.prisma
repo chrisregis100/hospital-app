@@ -1,0 +1,302 @@
+// Schéma Prisma - Lokita v1
+// Base de données optimisée pour le Bénin (Cotonou & Abomey-Calavi)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Énumération des rôles utilisateurs
+enum UserRole {
+  PATIENT
+  SECRETARY
+  DOCTOR
+  SUPER_ADMIN
+}
+
+// Énumération des statuts de rendez-vous
+enum AppointmentStatus {
+  PENDING       // En attente de validation
+  CONFIRMED     // Confirmé par secrétaire
+  ARRIVED       // Patient arrivé
+  COMPLETED     // Consultation terminée
+  CANCELLED     // Annulé
+  NO_SHOW       // Patient absent
+}
+
+// Énumération des tranches horaires
+enum TimeSlot {
+  MORNING_8_10    // 8h-10h
+  MORNING_10_12   // 10h-12h
+  AFTERNOON_14_16 // 14h-16h
+  AFTERNOON_16_18 // 16h-18h
+  EVENING_18_20   // 18h-20h
+}
+
+// Énumération des types de notifications
+enum NotificationType {
+  SMS
+  WEB_PUSH
+}
+
+// Table Utilisateurs
+model User {
+  id              String    @id @default(cuid())
+  phoneNumber     String    @unique // Format: +229XXXXXXXX
+  firstName       String
+  lastName        String
+  role            UserRole  @default(PATIENT)
+  isActive        Boolean   @default(true)
+  isPhoneVerified Boolean   @default(false)
+  
+  // Consentement RGPD/Protection données
+  consentGiven    Boolean   @default(false)
+  consentDate     DateTime?
+  
+  // Champs chiffrés (utiliser pgcrypto)
+  // Implémentation via les middlewares Prisma
+  
+  // Relations
+  appointments    Appointment[]
+  otpCodes        OtpCode[]
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  hospital        Hospital?      @relation(fields: [hospitalId], references: [id])
+  hospitalId      String?
+  approvedHospitals Hospital[] @relation("ApprovedHospitals")
+  confirmedAppointments Appointment[] @relation("ConfirmedBy")
+  completedAppointments Appointment[] @relation("CompletedBy")
+  cancelledAppointments Appointment[] @relation("CancelledBy")
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([phoneNumber])
+  @@index([role])
+  @@map("users")
+}
+
+// Table Hôpitaux
+model Hospital {
+  id              String    @id @default(cuid())
+  name            String
+  address         String
+  district        String    // Quartier (Cotonou, Abomey-Calavi, etc.)
+  city            String    // Ville
+  phoneNumber     String
+  email           String?
+  
+  // Coordonnées GPS
+  latitude        Float?
+  longitude       Float?
+  
+  // Validation super-admin
+  isApproved      Boolean   @default(false)
+  approvedAt      DateTime?
+  approvedBy      String?
+  approvedByUser  User?     @relation("ApprovedHospitals", fields: [approvedBy], references: [id])
+  
+  // Horaires d'ouverture (format JSON)
+  openingHours    Json      // { "lundi": "8h-18h", ... }
+  
+  // Relations
+  specialties     HospitalSpecialty[]
+  appointments    Appointment[]
+  staff           User[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([district])
+  @@index([isApproved])
+  @@map("hospitals")
+}
+
+// Table des spécialités médicales
+model Specialty {
+  id              String    @id @default(cuid())
+  name            String    @unique // Ex: Cardiologie, Pédiatrie, etc.
+  description     String?
+  iconName        String?   // Nom de l'icône Lucide React
+  
+  // Relations
+  hospitals       HospitalSpecialty[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("specialties")
+}
+
+// Table de liaison Hôpital-Spécialité
+model HospitalSpecialty {
+  id              String    @id @default(cuid())
+  hospital        Hospital  @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  hospitalId      String
+  specialty       Specialty @relation(fields: [specialtyId], references: [id], onDelete: Cascade)
+  specialtyId     String
+  
+  // Médecins disponibles pour cette spécialité
+  availableDoctors Int     @default(1)
+  
+  createdAt       DateTime  @default(now())
+
+  @@unique([hospitalId, specialtyId])
+  @@index([hospitalId])
+  @@index([specialtyId])
+  @@map("hospital_specialties")
+}
+
+// Table des rendez-vous
+model Appointment {
+  id              String            @id @default(cuid())
+  
+  // Patient
+  patient         User              @relation(fields: [patientId], references: [id])
+  patientId       String
+  
+  // Hôpital
+  hospital        Hospital          @relation(fields: [hospitalId], references: [id])
+  hospitalId      String
+  
+  // Informations du RDV
+  requestedDate   DateTime          // Date souhaitée par le patient
+  requestedSlot   TimeSlot          // Tranche horaire souhaitée
+  confirmedDate   DateTime?         // Date/heure exacte fixée par secrétaire
+  confirmedBy     String?
+  confirmedByUser User?             @relation("ConfirmedBy", fields: [confirmedBy], references: [id])
+  
+  reason          String            // Motif de consultation
+  status          AppointmentStatus @default(PENDING)
+  
+  // Métadonnées
+  notes           String?           // Notes de la secrétaire
+  arrivedAt       DateTime?         // Heure d'arrivée du patient
+  completedAt     DateTime?         // Heure de fin de consultation
+  completedBy     String?
+  completedByUser User?             @relation("CompletedBy", fields: [completedBy], references: [id])
+  cancelledAt     DateTime?
+  cancelledBy     String?
+  cancelledByUser User?             @relation("CancelledBy", fields: [cancelledBy], references: [id])
+  cancellationReason String?
+  
+  // Relations
+  notifications   Notification[]
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([patientId])
+  @@index([hospitalId])
+  @@index([status])
+  @@index([requestedDate])
+  @@index([confirmedDate])
+  @@map("appointments")
+}
+
+// Table des codes OTP
+model OtpCode {
+  id              String    @id @default(cuid())
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  
+  code            String    // Code à 6 chiffres
+  expiresAt       DateTime  // Expire après 3 minutes
+  isUsed          Boolean   @default(false)
+  usedAt          DateTime?
+  
+  // Sécurité - limiter les tentatives
+  attempts        Int       @default(0)
+  maxAttempts     Int       @default(3)
+  
+  createdAt       DateTime  @default(now())
+
+  @@index([userId])
+  @@index([code])
+  @@index([expiresAt])
+  @@map("otp_codes")
+}
+
+// Table des notifications
+model Notification {
+  id              String           @id @default(cuid())
+  
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  
+  appointment     Appointment?     @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  appointmentId   String?
+  
+  type            NotificationType
+  title           String
+  message         String
+  
+  // Statut d'envoi
+  isSent          Boolean          @default(false)
+  sentAt          DateTime?
+  failedAt        DateTime?
+  errorMessage    String?
+  
+  // Lecture (pour Web Push uniquement)
+  isRead          Boolean          @default(false)
+  readAt          DateTime?
+  
+  createdAt       DateTime         @default(now())
+
+  @@index([userId])
+  @@index([appointmentId])
+  @@index([isSent])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// Table des journaux d'audit (sécurité)
+model AuditLog {
+  id              String    @id @default(cuid())
+  
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId          String?
+  
+  action          String    // Ex: LOGIN, CREATE_APPOINTMENT, APPROVE_HOSPITAL
+  entityType      String    // Ex: User, Appointment, Hospital
+  entityId        String?
+  
+  // Données modifiées (format JSON)
+  oldData         Json?
+  newData         Json?
+  
+  // Métadonnées de la requête
+  ipAddress       String?
+  userAgent       String?
+  
+  createdAt       DateTime  @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// Table de consentement (RGPD/Protection des données)
+model Consent {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  
+  // Types de consentement
+  dataProcessing  Boolean   @default(false) // Traitement des données personnelles
+  smsNotifications Boolean  @default(false) // Notifications SMS
+  pushNotifications Boolean @default(false) // Notifications Push
+  
+  // Métadonnées
+  ipAddress       String?
+  userAgent       String?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("consents")
+}
