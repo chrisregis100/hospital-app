@@ -12,6 +12,7 @@ export interface JWTPayload {
   role: string;
   iat?: number;
   exp?: number;
+  [key: string]: any;
 }
 
 /**
@@ -21,16 +22,13 @@ export interface JWTPayload {
  */
 export async function signJWT(payload: JWTPayload): Promise<string> {
   try {
-    const privateKey = await crypto.subtle.importKey(
-      "pkcs8",
-      Buffer.from(JWT_PRIVATE_KEY, "utf-8"),
-      {
-        name: "RSASSA-PKCS1-v1_5",
-        hash: "SHA-256",
-      },
-      true,
-      ["sign"]
-    );
+    if (!JWT_PRIVATE_KEY) {
+      throw new Error("JWT_PRIVATE_KEY non configurée");
+    }
+
+    // Importer la clé privée PEM
+    const { createPrivateKey } = await import("crypto");
+    const privateKey = createPrivateKey(JWT_PRIVATE_KEY);
 
     const jwt = await new SignJWT(payload)
       .setProtectedHeader({ alg: "RS256" })
@@ -52,16 +50,13 @@ export async function signJWT(payload: JWTPayload): Promise<string> {
  */
 export async function verifyJWT(token: string): Promise<JWTPayload> {
   try {
-    const publicKey = await crypto.subtle.importKey(
-      "spki",
-      Buffer.from(JWT_PUBLIC_KEY, "utf-8"),
-      {
-        name: "RSASSA-PKCS1-v1_5",
-        hash: "SHA-256",
-      },
-      true,
-      ["verify"]
-    );
+    if (!JWT_PUBLIC_KEY) {
+      throw new Error("JWT_PUBLIC_KEY non configurée");
+    }
+
+    // Importer la clé publique PEM
+    const { createPublicKey } = await import("crypto");
+    const publicKey = createPublicKey(JWT_PUBLIC_KEY);
 
     const { payload } = await jwtVerify(token, publicKey, {
       algorithms: ["RS256"],

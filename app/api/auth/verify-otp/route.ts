@@ -40,15 +40,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Trouver le code OTP
+    // Trouver le code OTP le plus récent
     const otpRecord = await prisma.otpCode.findFirst({
       where: {
         userId: user.id,
         code: code.trim(),
         isUsed: false,
-        expiresAt: {
-          gte: new Date(),
-        },
       },
       orderBy: {
         createdAt: "desc",
@@ -56,19 +53,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (!otpRecord) {
-      // Incrémenter les tentatives échouées
-      await prisma.otpCode.updateMany({
-        where: {
-          userId: user.id,
-          code: code.trim(),
-        },
-        data: {
-          attempts: {
-            increment: 1,
-          },
-        },
-      });
-
       return NextResponse.json(
         { error: "Code invalide ou expiré" },
         { status: 401 }
@@ -82,6 +66,24 @@ export async function POST(request: NextRequest) {
         { status: 429 }
       );
     }
+
+    // Vérifier l'expiration
+    if (otpRecord.expiresAt < new Date()) {
+      return NextResponse.json(
+        { error: "Code expiré" },
+        { status: 401 }
+      );
+    }
+
+    // Incrémenter les tentatives (même si réussi, pour tracer)
+    await prisma.otpCode.update({
+      where: { id: otpRecord.id },
+      data: {
+        attempts: {
+          increment: 1,
+        },
+      },
+    });
 
     // Marquer le code comme utilisé
     await prisma.otpCode.update({
