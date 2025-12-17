@@ -286,7 +286,9 @@ export default function HospitalsPage() {
 
                       {/* Action */}
                       <Link
-                        href={`/hospitals/${hospital.id}`}
+                        href={`/appointments/new?hospitalId=${
+                          hospital.id
+                        }&hospitalName=${encodeURIComponent(hospital.name)}`}
                         className="block"
                       >
                         <Button className="w-full group">

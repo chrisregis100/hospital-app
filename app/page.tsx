@@ -1,6 +1,7 @@
 import { Features } from "@/components/landing/Features";
 import { CTA, Footer } from "@/components/landing/Footer";
 import { Hero } from "@/components/landing/Hero";
+import { Hospitals } from "@/components/landing/Hospitals";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { Navbar } from "@/components/landing/Navbar";
 import { Partners } from "@/components/landing/Partners";
@@ -12,6 +13,7 @@ export default function HomePage() {
       <main>
         <Hero />
         <Partners />
+        <Hospitals />
         <Features />
         <HowItWorks />
         <CTA />

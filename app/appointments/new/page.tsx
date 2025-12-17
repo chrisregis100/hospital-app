@@ -1,327 +1,475 @@
-"use client";
+'use client';
 
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+<parameter name="Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Calendar, Clock, Heart, Loader2 } from "lucide-react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { useToast } from "@/components/ui/use-toast";
+import { isValidBeninPhone, formatBeninPhone } from "@/lib/utils";
+import {
+  Calendar,
+  Clock,
+  User,
+  Phone,
+  FileText,
+  CheckCircle2,
+  ArrowLeft,
+  ArrowRight,
+  Heart,
+  MapPin,
+  Loader2,
+} from "lucide-react";
 
 const TIME_SLOTS = [
-  { value: "MORNING_8_10", label: "8h00 - 10h00" },
-  { value: "MORNING_10_12", label: "10h00 - 12h00" },
-  { value: "AFTERNOON_14_16", label: "14h00 - 16h00" },
-  { value: "AFTERNOON_16_18", label: "16h00 - 18h00" },
-  { value: "EVENING_18_20", label: "18h00 - 20h00" },
+  { value: "MORNING_8_10", label: "08h - 10h", icon: "🌅" },
+  { value: "MORNING_10_12", label: "10h - 12h", icon: "☀️" },
+  { value: "AFTERNOON_14_16", label: "14h - 16h", icon: "🌤️" },
+  { value: "AFTERNOON_16_18", label: "16h - 18h", icon: "🌆" },
+  { value: "EVENING_18_20", label: "18h - 20h", icon: "🌙" },
 ];
 
-function NewAppointmentForm() {
+function AppointmentForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const hospitalId = searchParams.get("hospital");
+  const { toast } = useToast();
 
-  const [hospital, setHospital] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-
-  // Form state
-  const [formData, setFormData] = useState({
-    requestedDate: "",
-    requestedSlot: "",
-    reason: "",
-    firstName: "",
-    lastName: "",
-    phoneNumber: "+229",
-  });
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  
+  // Données du formulaire
+  const [hospitalId, setHospitalId] = useState(searchParams.get("hospitalId") || "");
+  const [hospitalName, setHospitalName] = useState(searchParams.get("hospitalName") || "");
+  const [preferredDate, setPreferredDate] = useState("");
+  const [timeSlot, setTimeSlot] = useState("");
+  const [reason, setReason] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
 
   useEffect(() => {
-    if (hospitalId) {
-      loadHospital();
+    if (!hospitalId) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez sélectionner un hôpital",
+        variant: "destructive",
+      });
+      router.push("/");
     }
+  }, [hospitalId, router, toast]);
 
-    // Charger les données utilisateur si connecté
-    const user = localStorage.getItem("user");
-    if (user) {
-      const userData = JSON.parse(user);
-      setFormData((prev) => ({
-        ...prev,
-        firstName: userData.firstName || "",
-        lastName: userData.lastName || "",
-        phoneNumber: userData.phoneNumber || "+229",
-      }));
-    }
-  }, [hospitalId]);
+  const getMinDate = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split("T")[0];
+  };
 
-  const loadHospital = async () => {
-    try {
-      const res = await fetch(`/api/hospitals?id=${hospitalId}`);
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        setHospital(data[0]);
+  const getMaxDate = () => {
+    const maxDate = new Date();
+    maxDate.setMonth(maxDate.getMonth() + 3);
+    return maxDate.toISOString().split("T")[0];
+  };
+
+  const validateStep = () => {
+    if (step === 1) {
+      if (!preferredDate || !timeSlot) {
+        toast({
+          title: "Champs requis",
+          description: "Veuillez sélectionner une date et un créneau horaire",
+          variant: "destructive",
+        });
+        return false;
       }
-    } catch (err) {
-      setError("Erreur lors du chargement de l'hôpital");
+    } else if (step === 2) {
+      if (!reason.trim()) {
+        toast({
+          title: "Champ requis",
+          description: "Veuillez indiquer le motif de votre consultation",
+          variant: "destructive",
+        });
+        return false;
+      }
+    } else if (step === 3) {
+      if (!firstName.trim() || !lastName.trim() || !phoneNumber.trim()) {
+        toast({
+          title: "Champs requis",
+          description: "Veuillez remplir tous les champs",
+          variant: "destructive",
+        });
+        return false;
+      }
+      if (!isValidBeninPhone(phoneNumber)) {
+        toast({
+          title: "Numéro invalide",
+          description: "Veuillez entrer un numéro béninois valide (+229XXXXXXXX)",
+          variant: "destructive",
+        });
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const handleNext = () => {
+    if (validateStep()) {
+      setStep(step + 1);
+    }
+  };
+
+  const handleBack = () => {
+    setStep(step - 1);
+  };
+
+  const handleSubmit = async () => {
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/appointments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hospitalId,
+          requestedDate: new Date(preferredDate).toISOString(),
+          requestedSlot: timeSlot,
+          reason,
+          firstName,
+          lastName,
+          phoneNumber: formatBeninPhone(phoneNumber) || phoneNumber,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Erreur lors de la création du rendez-vous");
+      }
+
+      toast({
+        title: "Rendez-vous demandé !",
+        description: "Vous allez recevoir un SMS de confirmation",
+      });
+
+      router.push(`/appointments/${data.id}/confirmation`);
+    } catch (error) {
+      console.error("Erreur:", error);
+      toast({
+        title: "Erreur",
+        description: error instanceof Error ? error.message : "Impossible de créer le rendez-vous",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setSubmitting(true);
-
-    try {
-      const token = localStorage.getItem("token");
-
-      const res = await fetch("/api/appointments", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({
-          hospitalId,
-          ...formData,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(
-          data.error || "Erreur lors de la création du rendez-vous"
-        );
-      }
-
-      // Succès - rediriger vers la page de confirmation
-      router.push(`/appointments/${data.id}/confirmation`);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
-      </div>
-    );
-  }
-
-  if (!hospital) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-primary-50 to-white flex items-center justify-center p-4">
-        <div className="text-center">
-          <p className="text-gray-600 mb-4">Hôpital non trouvé</p>
-          <Link href="/hospitals">
-            <Button>Retour aux hôpitaux</Button>
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  // Calculer la date minimale (demain)
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const minDate = tomorrow.toISOString().split("T")[0];
-
-  // Calculer la date maximale (3 mois)
-  const maxDate = new Date();
-  maxDate.setMonth(maxDate.getMonth() + 3);
-  const maxDateStr = maxDate.toISOString().split("T")[0];
+  const steps = [
+    { number: 1, title: "Date & Heure", icon: Calendar },
+    { number: 2, title: "Motif", icon: FileText },
+    { number: 3, title: "Vos Informations", icon: User },
+    { number: 4, title: "Confirmation", icon: CheckCircle2 },
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary-50 to-white">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-200">
-        <nav className="container mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <Heart className="w-8 h-8 text-primary-500" fill="#00A86B" />
-              <span className="text-2xl font-bold text-gray-900">Lokita</span>
-            </Link>
-            <Link href="/hospitals">
-              <Button variant="ghost">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Retour
-              </Button>
-            </Link>
-          </div>
-        </nav>
-      </header>
-
-      <div className="container mx-auto px-4 sm:px-6 py-8 max-w-2xl">
-        {/* Info hôpital */}
-        <div className="mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-teal-50 py-12 px-4">
+      <div className="max-w-3xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Prendre rendez-vous
+            Nouveau Rendez-vous
           </h1>
-          <p className="text-lg text-gray-600">{hospital.name}</p>
-          <p className="text-sm text-gray-500">{hospital.address}</p>
+          <p className="text-gray-600 flex items-center justify-center gap-2">
+            <MapPin className="h-4 w-4 text-[#00A86B]" />
+            {hospitalName}
+          </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Détails du rendez-vous</CardTitle>
-            <CardDescription>
-              Remplissez le formulaire pour demander un rendez-vous. L'hôpital
-              confirmera la date et l'heure exactes.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Date souhaitée */}
-              <div className="space-y-2">
-                <Label htmlFor="date">
-                  <Calendar className="w-4 h-4 inline mr-2" />
-                  Date souhaitée
-                </Label>
-                <Input
-                  id="date"
-                  type="date"
-                  min={minDate}
-                  max={maxDateStr}
-                  value={formData.requestedDate}
-                  onChange={(e) =>
-                    setFormData({ ...formData, requestedDate: e.target.value })
-                  }
-                  required
-                />
-                <p className="text-xs text-gray-500">
-                  Choisissez une date entre demain et 3 mois
-                </p>
-              </div>
+        {/* Progress Indicator */}
+        <div className="mb-12">
+          <div className="flex items-center justify-between relative">
+            {/* Ligne de connexion */}
+            <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-200 -z-10" />
+            <div
+              className="absolute top-1/2 left-0 h-0.5 bg-[#00A86B] transition-all duration-500 -z-10"
+              style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}
+            />
 
-              {/* Créneau horaire */}
-              <div className="space-y-2">
-                <Label htmlFor="slot">
-                  <Clock className="w-4 h-4 inline mr-2" />
-                  Tranche horaire préférée
-                </Label>
-                <Select
-                  value={formData.requestedSlot}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, requestedSlot: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sélectionnez un créneau" />
-                  </SelectTrigger>
-                  <SelectContent>
+            {steps.map((s) => {
+              const Icon = s.icon;
+              const isActive = step === s.number;
+              const isCompleted = step > s.number;
+
+              return (
+                <div key={s.number} className="flex flex-col items-center">
+                  <div
+                    className={`
+                      w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300
+                      ${isActive ? 'bg-[#00A86B] text-white scale-110 shadow-lg' : ''}
+                      ${isCompleted ? 'bg-[#00A86B] text-white' : ''}
+                      ${!isActive && !isCompleted ? 'bg-white border-2 border-gray-300 text-gray-400' : ''}
+                    `}
+                  >
+                    {isCompleted ? (
+                      <CheckCircle2 className="h-6 w-6" />
+                    ) : (
+                      <Icon className="h-6 w-6" />
+                    )}
+                  </div>
+                  <span className={`mt-2 text-sm font-medium ${isActive ? 'text-[#00A86B]' : 'text-gray-500'}`}>
+                    {s.title}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Form Card */}
+        <Card className="shadow-xl border-0 overflow-hidden">
+          <CardContent className="p-8">
+            {/* Step 1: Date & Time */}
+            {step === 1 && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div>
+                  <Label htmlFor="date" className="text-lg font-semibold mb-2 flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-[#00A86B]" />
+                    Date préférée
+                  </Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={preferredDate}
+                    onChange={(e) => setPreferredDate(e.target.value)}
+                    min={getMinDate()}
+                    max={getMaxDate()}
+                    className="mt-2 h-12 text-lg"
+                  />
+                  <p className="text-sm text-gray-500 mt-1">
+                    Sélectionnez une date entre demain et dans 3 mois
+                  </p>
+                </div>
+
+                <div>
+                  <Label className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-[#00A86B]" />
+                    Créneau horaire
+                  </Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
                     {TIME_SLOTS.map((slot) => (
-                      <SelectItem key={slot.value} value={slot.value}>
-                        {slot.label}
-                      </SelectItem>
+                      <button
+                        key={slot.value}
+                        type="button"
+                        onClick={() => setTimeSlot(slot.value)}
+                        className={`
+                          p-4 rounded-lg border-2 transition-all duration-200 text-left
+                          ${timeSlot === slot.value
+                            ? 'border-[#00A86B] bg-green-50 shadow-md'
+                            : 'border-gray-200 hover:border-[#00A86B]/50 hover:bg-gray-50'
+                          }
+                        `}
+                      >
+                        <span className="text-2xl mr-2">{slot.icon}</span>
+                        <span className="font-semibold">{slot.label}</span>
+                      </button>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </div>
+                </div>
               </div>
+            )}
 
-              {/* Motif */}
-              <div className="space-y-2">
-                <Label htmlFor="reason">Motif de consultation</Label>
-                <Textarea
-                  id="reason"
-                  placeholder="Décrivez brièvement la raison de votre consultation..."
-                  value={formData.reason}
-                  onChange={(e) =>
-                    setFormData({ ...formData, reason: e.target.value })
-                  }
-                  required
-                  rows={4}
-                />
+            {/* Step 2: Reason */}
+            {step === 2 && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div>
+                  <Label htmlFor="reason" className="text-lg font-semibold mb-2 flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-[#00A86B]" />
+                    Motif de la consultation
+                  </Label>
+                  <Textarea
+                    id="reason"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Décrivez brièvement la raison de votre visite..."
+                    className="mt-2 min-h-[150px] text-lg"
+                    maxLength={500}
+                  />
+                  <p className="text-sm text-gray-500 mt-1">
+                    {reason.length}/500 caractères
+                  </p>
+                </div>
               </div>
+            )}
 
-              {/* Informations personnelles */}
-              <div className="border-t pt-6">
-                <h3 className="font-semibold mb-4">Vos informations</h3>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">Prénom</Label>
+            {/* Step 3: Personal Information */}
+            {step === 3 && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="firstName" className="text-lg font-semibold mb-2">
+                      Prénom
+                    </Label>
                     <Input
                       id="firstName"
-                      type="text"
-                      value={formData.firstName}
-                      onChange={(e) =>
-                        setFormData({ ...formData, firstName: e.target.value })
-                      }
-                      required
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="Votre prénom"
+                      className="mt-2 h-12 text-lg"
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">Nom</Label>
+                  <div>
+                    <Label htmlFor="lastName" className="text-lg font-semibold mb-2">
+                      Nom
+                    </Label>
                     <Input
                       id="lastName"
-                      type="text"
-                      value={formData.lastName}
-                      onChange={(e) =>
-                        setFormData({ ...formData, lastName: e.target.value })
-                      }
-                      required
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="Votre nom"
+                      className="mt-2 h-12 text-lg"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2 mt-4">
-                  <Label htmlFor="phone">Numéro de téléphone</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={formData.phoneNumber}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phoneNumber: e.target.value })
-                    }
-                    required
-                    placeholder="+229 XX XX XX XX"
-                  />
+                <div>
+                  <Label htmlFor="phone" className="text-lg font-semibold mb-2 flex items-center gap-2">
+                    <Phone className="h-5 w-5 text-[#00A86B]" />
+                    Numéro de téléphone
+                  </Label>
+                  <div className="relative mt-2">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
+                      +229
+                    </span>
+                    <Input
+                      id="phone"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      placeholder="XX XX XX XX"
+                      className="h-12 text-lg pl-16"
+                      maxLength={8}
+                    />
+                  </div>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Vous recevrez un SMS de confirmation
+                  </p>
                 </div>
               </div>
+            )}
 
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
-                  {error}
+            {/* Step 4: Confirmation */}
+            {step === 4 && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="text-center mb-6">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
+                    <CheckCircle2 className="h-8 w-8 text-[#00A86B]" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900">
+                    Vérifiez vos informations
+                  </h3>
                 </div>
-              )}
 
-              <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Envoi en cours...
-                  </>
-                ) : (
-                  "Envoyer la demande"
-                )}
+                <div className="bg-gray-50 rounded-lg p-6 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <MapPin className="h-5 w-5 text-[#00A86B] mt-1" />
+                    <div>
+                      <p className="font-semibold text-gray-700">Hôpital</p>
+                      <p className="text-gray-900">{hospitalName}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <Calendar className="h-5 w-5 text-[#00A86B] mt-1" />
+                    <div>
+                      <p className="font-semibold text-gray-700">Date</p>
+                      <p className="text-gray-900">
+                        {new Date(preferredDate).toLocaleDateString('fr-FR', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <Clock className="h-5 w-5 text-[#00A86B] mt-1" />
+                    <div>
+                      <p className="font-semibold text-gray-700">Créneau</p>
+                      <p className="text-gray-900">
+                        {TIME_SLOTS.find((s) => s.value === timeSlot)?.label}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <FileText className="h-5 w-5 text-[#00A86B] mt-1" />
+                    <div>
+                      <p className="font-semibold text-gray-700">Motif</p>
+                      <p className="text-gray-900">{reason}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <User className="h-5 w-5 text-[#00A86B] mt-1" />
+                    <div>
+                      <p className="font-semibold text-gray-700">Patient</p>
+                      <p className="text-gray-900">{firstName} {lastName}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <Phone className="h-5 w-5 text-[#00A86B] mt-1" />
+                    <div>
+                      <p className="font-semibold text-gray-700">Téléphone</p>
+                      <p className="text-gray-900">+229 {phoneNumber}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Navigation Buttons */}
+            <div className="flex items-center justify-between mt-8 pt-6 border-t">
+              <Button
+                variant="outline"
+                onClick={handleBack}
+                disabled={step === 1 || loading}
+                className="flex items-center gap-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Précédent
               </Button>
 
-              <p className="text-xs text-center text-gray-500">
-                Vous recevrez une confirmation par SMS une fois que l'hôpital
-                aura validé votre rendez-vous
-              </p>
-            </form>
+              {step < 4 ? (
+                <Button
+                  onClick={handleNext}
+                  disabled={loading}
+                  className="bg-[#00A86B] hover:bg-[#008f5d] flex items-center gap-2"
+                >
+                  Suivant
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSubmit}
+                  disabled={loading}
+                  className="bg-[#00A86B] hover:bg-[#008f5d] flex items-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Envoi...
+                    </>
+                  ) : (
+                    <>
+                      <Heart className="h-4 w-4" />
+                      Confirmer
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -331,14 +479,12 @@ function NewAppointmentForm() {
 
 export default function NewAppointmentPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex justify-center items-center min-h-screen">
-          <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
-        </div>
-      }
-    >
-      <NewAppointmentForm />
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[#00A86B]" />
+      </div>
+    }>
+      <AppointmentForm />
     </Suspense>
   );
 }

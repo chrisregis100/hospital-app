@@ -1,420 +1,350 @@
-"use client";
+'use client';
 
-import { Button } from "@/components/ui/button";
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { StatsCard } from '@/components/admin/StatsCard';
+import { Button } from '@/components/ui/button';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { useToast } from "@/components/ui/use-toast";
-import { Building2, Check, LogOut, MapPin, Phone, X } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+  Building2,
+  Users,
+  Calendar,
+  TrendingUp,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  ArrowRight,
+} from 'lucide-react';
+import Link from 'next/link';
 
-interface Hospital {
+interface DashboardStats {
+  hospitals: {
+    total: number;
+    approved: number;
+    pending: number;
+  };
+  users: {
+    total: number;
+    patients: number;
+    doctors: number;
+    secretaries: number;
+  };
+  appointments: {
+    total: number;
+    today: number;
+    pending: number;
+    confirmed: number;
+    completed: number;
+    cancelled: number;
+  };
+}
+
+interface RecentActivity {
   id: string;
-  name: string;
-  address: string;
-  district: string;
-  phoneNumber?: string;
-  email?: string;
-  isApproved: boolean;
-  approvedAt?: string;
-  createdAt: string;
-  approvedBy?: {
-    firstName: string;
-    lastName: string;
-  };
-  _count?: {
-    specialties: number;
-  };
+  type: 'appointment' | 'hospital' | 'user';
+  message: string;
+  time: string;
 }
 
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const { toast } = useToast();
-
-  const [hospitals, setHospitals] = useState<Hospital[]>([]);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem('token');
     if (!token) {
-      router.push("/auth/login");
+      router.push('/auth/login');
       return;
     }
 
-    fetchHospitals();
+    fetchDashboardData();
   }, [router]);
 
-  const fetchHospitals = async () => {
+  const fetchDashboardData = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("/api/admin/hospitals", {
-        headers: {
-          Authorization: `Bearer ${token}`,
+      const token = localStorage.getItem('token');
+      
+      // Simuler des données (en attendant la vraie API)
+      // TODO: Remplacer par de vraies requêtes API
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setStats({
+        hospitals: {
+          total: 12,
+          approved: 10,
+          pending: 2,
+        },
+        users: {
+          total: 245,
+          patients: 200,
+          doctors: 30,
+          secretaries: 15,
+        },
+        appointments: {
+          total: 1250,
+          today: 18,
+          pending: 25,
+          confirmed: 35,
+          completed: 1150,
+          cancelled: 40,
         },
       });
 
-      if (response.status === 401) {
-        router.push("/auth/login");
-        return;
-      }
-
-      if (response.status === 403) {
-        toast({
-          title: "Accès refusé",
-          description: "Vous devez être super-admin pour accéder à cette page",
-          variant: "destructive",
-        });
-        router.push("/");
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error("Erreur lors du chargement");
-      }
-
-      const data = await response.json();
-      setHospitals(data);
+      setRecentActivities([
+        {
+          id: '1',
+          type: 'appointment',
+          message: 'Nouveau RDV à CNHU - Dr. Kouassi',
+          time: 'Il y a 5 minutes',
+        },
+        {
+          id: '2',
+          type: 'hospital',
+          message: 'Clinique des Anges demande validation',
+          time: 'Il y a 15 minutes',
+        },
+        {
+          id: '3',
+          type: 'user',
+          message: 'Nouveau médecin inscrit - Dr. Mensah',
+          time: 'Il y a 1 heure',
+        },
+        {
+          id: '4',
+          type: 'appointment',
+          message: 'RDV confirmé pour demain - Hôpital de Zone',
+          time: 'Il y a 2 heures',
+        },
+      ]);
     } catch (error) {
-      console.error("Erreur:", error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de charger les hôpitaux",
-        variant: "destructive",
-      });
+      console.error('Erreur:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleApprove = async (hospitalId: string) => {
-    setActionLoading(hospitalId);
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `/api/admin/hospitals/${hospitalId}/approve`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Erreur lors de l'approbation");
-      }
-
-      toast({
-        title: "Hôpital approuvé",
-        description: "L'hôpital est maintenant visible par les patients",
-      });
-
-      await fetchHospitals();
-    } catch (error) {
-      console.error("Erreur:", error);
-      toast({
-        title: "Erreur",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Impossible d'approuver l'hôpital",
-        variant: "destructive",
-      });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleReject = async (hospitalId: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir rejeter cet hôpital ?")) {
-      return;
-    }
-
-    setActionLoading(hospitalId);
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `/api/admin/hospitals/${hospitalId}/reject`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Erreur lors du rejet");
-      }
-
-      toast({
-        title: "Hôpital rejeté",
-        description: "L'hôpital a été retiré de la liste",
-      });
-
-      await fetchHospitals();
-    } catch (error) {
-      console.error("Erreur:", error);
-      toast({
-        title: "Erreur",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Impossible de rejeter l'hôpital",
-        variant: "destructive",
-      });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    router.push("/");
-  };
-
-  if (loading) {
+  if (loading || !stats) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement...</p>
+      <div className="p-8">
+        <div className="animate-pulse space-y-8">
+          <div className="h-8 bg-gray-200 rounded w-1/4" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-32 bg-gray-200 rounded" />
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
-  const pendingHospitals = hospitals.filter((h) => !h.isApproved);
-  const approvedHospitals = hospitals.filter((h) => h.isApproved);
-
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="p-4 md:p-8 space-y-8">
       {/* Header */}
-      <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Dashboard Super-Admin
-              </h1>
-              <p className="text-sm text-gray-600">Gestion des hôpitaux</p>
-            </div>
-            <Button onClick={handleLogout} variant="outline" size="sm">
-              <LogOut className="h-4 w-4 mr-2" />
-              Déconnexion
-            </Button>
-          </div>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          Tableau de bord
+        </h1>
+        <p className="text-gray-600">
+          Vue d'ensemble de la plateforme Lokita
+        </p>
       </div>
 
-      {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-gray-600">
-                En attente
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-yellow-600">
-                {pendingHospitals.length}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-gray-600">
-                Approuvés
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-green-600">
-                {approvedHospitals.length}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-gray-600">
-                Total
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-primary-600">
-                {hospitals.length}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatsCard
+          title="Hôpitaux"
+          value={stats.hospitals.total}
+          icon={Building2}
+          description={`${stats.hospitals.approved} approuvés, ${stats.hospitals.pending} en attente`}
+          trend={{ value: '+2', isPositive: true }}
+        />
+        <StatsCard
+          title="Utilisateurs"
+          value={stats.users.total}
+          icon={Users}
+          description={`${stats.users.patients} patients, ${stats.users.doctors} médecins`}
+          trend={{ value: '+15%', isPositive: true }}
+        />
+        <StatsCard
+          title="RDV aujourd'hui"
+          value={stats.appointments.today}
+          icon={Calendar}
+          description={`${stats.appointments.pending} en attente`}
+          trend={{ value: '+3', isPositive: true }}
+        />
+        <StatsCard
+          title="Total RDV"
+          value={stats.appointments.total}
+          icon={TrendingUp}
+          description={`${stats.appointments.completed} terminés`}
+          trend={{ value: '+8%', isPositive: true }}
+        />
+      </div>
 
-        {/* Pending Hospitals */}
-        <Card className="mb-8">
+      {/* Charts and Activities Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Appointments Status */}
+        <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Hôpitaux en attente d'approbation</CardTitle>
-            <CardDescription>
-              Validez ou rejetez les nouveaux hôpitaux
-            </CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-[#00A86B]" />
+              État des rendez-vous
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {pendingHospitals.length === 0 ? (
-              <div className="text-center py-12">
-                <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">Aucun hôpital en attente</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {pendingHospitals.map((hospital) => (
-                  <div
-                    key={hospital.id}
-                    className="border rounded-lg p-4 border-yellow-200 bg-yellow-50"
-                  >
-                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                      {/* Info */}
-                      <div className="flex-1 space-y-2">
-                        <h3 className="font-semibold text-lg">
-                          {hospital.name}
-                        </h3>
-
-                        <div className="flex items-start gap-2 text-sm">
-                          <MapPin className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-gray-700">{hospital.address}</p>
-                            <p className="text-gray-500">{hospital.district}</p>
-                          </div>
-                        </div>
-
-                        {hospital.phoneNumber && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <Phone className="h-4 w-4 text-gray-500" />
-                            <a
-                              href={`tel:${hospital.phoneNumber}`}
-                              className="text-primary-600 hover:underline"
-                            >
-                              {hospital.phoneNumber}
-                            </a>
-                          </div>
-                        )}
-
-                        {hospital.email && (
-                          <div className="text-sm text-gray-600">
-                            Email : {hospital.email}
-                          </div>
-                        )}
-
-                        <div className="text-xs text-gray-500">
-                          Créé le{" "}
-                          {new Date(hospital.createdAt).toLocaleDateString(
-                            "fr-FR"
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex lg:flex-col gap-2">
-                        <Button
-                          onClick={() => handleApprove(hospital.id)}
-                          size="sm"
-                          className="flex-1 lg:flex-none"
-                          disabled={actionLoading === hospital.id}
-                        >
-                          <Check className="h-4 w-4 mr-2" />
-                          Approuver
-                        </Button>
-                        <Button
-                          onClick={() => handleReject(hospital.id)}
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 lg:flex-none text-red-600 hover:text-red-700"
-                          disabled={actionLoading === hospital.id}
-                        >
-                          <X className="h-4 w-4 mr-2" />
-                          Rejeter
-                        </Button>
-                      </div>
-                    </div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                <div className="flex items-center gap-3">
+                  <Clock className="h-5 w-5 text-yellow-600" />
+                  <div>
+                    <p className="font-semibold text-gray-900">En attente</p>
+                    <p className="text-sm text-gray-600">Nécessitent une confirmation</p>
                   </div>
-                ))}
+                </div>
+                <span className="text-2xl font-bold text-yellow-600">
+                  {stats.appointments.pending}
+                </span>
               </div>
-            )}
+
+              <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  <div>
+                    <p className="font-semibold text-gray-900">Confirmés</p>
+                    <p className="text-sm text-gray-600">Prêts pour consultation</p>
+                  </div>
+                </div>
+                <span className="text-2xl font-bold text-green-600">
+                  {stats.appointments.confirmed}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-blue-600" />
+                  <div>
+                    <p className="font-semibold text-gray-900">Terminés</p>
+                    <p className="text-sm text-gray-600">Consultations effectuées</p>
+                  </div>
+                </div>
+                <span className="text-2xl font-bold text-blue-600">
+                  {stats.appointments.completed}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
+                <div className="flex items-center gap-3">
+                  <XCircle className="h-5 w-5 text-red-600" />
+                  <div>
+                    <p className="font-semibold text-gray-900">Annulés</p>
+                    <p className="text-sm text-gray-600">RDV non honorés</p>
+                  </div>
+                </div>
+                <span className="text-2xl font-bold text-red-600">
+                  {stats.appointments.cancelled}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <Button asChild className="w-full bg-[#00A86B] hover:bg-[#008f5d]">
+                <Link href="/dashboard/admin/appointments">
+                  Voir tous les rendez-vous
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
-        {/* Approved Hospitals */}
+        {/* Recent Activities */}
         <Card>
           <CardHeader>
-            <CardTitle>Hôpitaux approuvés</CardTitle>
-            <CardDescription>
-              Liste des hôpitaux visibles par les patients
-            </CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-[#00A86B]" />
+              Activités récentes
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {approvedHospitals.length === 0 ? (
-              <div className="text-center py-12">
-                <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">Aucun hôpital approuvé</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {approvedHospitals.map((hospital) => (
-                  <div
-                    key={hospital.id}
-                    className="border rounded-lg p-4 border-green-200 bg-green-50"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-start justify-between">
-                        <h3 className="font-semibold text-lg">
-                          {hospital.name}
-                        </h3>
-                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-                          Approuvé
-                        </span>
-                      </div>
-
-                      <div className="flex items-start gap-2 text-sm">
-                        <MapPin className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <p className="text-gray-700">{hospital.address}</p>
-                          <p className="text-gray-500">{hospital.district}</p>
-                        </div>
-                      </div>
-
-                      {hospital.phoneNumber && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Phone className="h-4 w-4 text-gray-500" />
-                          <span className="text-gray-700">
-                            {hospital.phoneNumber}
-                          </span>
-                        </div>
-                      )}
-
-                      {hospital.approvedAt && (
-                        <div className="text-xs text-gray-500">
-                          Approuvé le{" "}
-                          {new Date(hospital.approvedAt).toLocaleDateString(
-                            "fr-FR"
-                          )}
-                          {hospital.approvedBy &&
-                            ` par ${hospital.approvedBy.firstName} ${hospital.approvedBy.lastName}`}
-                        </div>
-                      )}
-                    </div>
+            <div className="space-y-4">
+              {recentActivities.map((activity) => (
+                <div key={activity.id} className="flex gap-3 pb-4 border-b border-gray-100 last:border-0">
+                  <div className={`
+                    w-2 h-2 rounded-full mt-2 flex-shrink-0
+                    ${activity.type === 'appointment' ? 'bg-blue-500' : ''}
+                    ${activity.type === 'hospital' ? 'bg-green-500' : ''}
+                    ${activity.type === 'user' ? 'bg-purple-500' : ''}
+                  `} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900">
+                      {activity.message}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {activity.time}
+                    </p>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Actions rapides</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Button
+              asChild
+              variant="outline"
+              className="h-auto py-4 justify-start border-2 hover:border-[#00A86B] hover:bg-green-50"
+            >
+              <Link href="/dashboard/admin/hospitals">
+                <Building2 className="h-5 w-5 mr-3 text-[#00A86B]" />
+                <div className="text-left">
+                  <p className="font-semibold">Gérer les hôpitaux</p>
+                  <p className="text-xs text-gray-500">Ajouter, modifier, valider</p>
+                </div>
+              </Link>
+            </Button>
+
+            <Button
+              asChild
+              variant="outline"
+              className="h-auto py-4 justify-start border-2 hover:border-[#00A86B] hover:bg-green-50"
+            >
+              <Link href="/dashboard/admin/users">
+                <Users className="h-5 w-5 mr-3 text-[#00A86B]" />
+                <div className="text-left">
+                  <p className="font-semibold">Gérer les utilisateurs</p>
+                  <p className="text-xs text-gray-500">Accès et permissions</p>
+                </div>
+              </Link>
+            </Button>
+
+            <Button
+              asChild
+              variant="outline"
+              className="h-auto py-4 justify-start border-2 hover:border-[#00A86B] hover:bg-green-50"
+            >
+              <Link href="/dashboard/admin/stats">
+                <TrendingUp className="h-5 w-5 mr-3 text-[#00A86B]" />
+                <div className="text-left">
+                  <p className="font-semibold">Statistiques avancées</p>
+                  <p className="text-xs text-gray-500">Graphes et analyses</p>
+                </div>
+              </Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

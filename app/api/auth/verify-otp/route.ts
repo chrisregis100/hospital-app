@@ -69,10 +69,7 @@ export async function POST(request: NextRequest) {
 
     // Vérifier l'expiration
     if (otpRecord.expiresAt < new Date()) {
-      return NextResponse.json(
-        { error: "Code expiré" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Code expiré" }, { status: 401 });
     }
 
     // Incrémenter les tentatives (même si réussi, pour tracer)
